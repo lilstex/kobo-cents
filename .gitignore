@@ -1,0 +1,5 @@
+/docs/*
+!/docs/deployment-vps.md
+.env
+.superpowers/
+image-assets/
