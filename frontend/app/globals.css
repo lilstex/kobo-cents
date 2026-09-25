@@ -1,0 +1,97 @@
+@import "tailwindcss";
+
+/*
+ * Terminal Precision design tokens, per docs/frontend-architecture/01.md
+ * and 07-phases.md. Dark-first: the bare :root holds the dark values,
+ * not an inverted light theme. Three states, not two: an un-stamped
+ * root resolves by prefers-color-scheme, an explicit [data-theme]
+ * always wins over the system preference.
+ */
+:root {
+  --bg: #0b0e0c;
+  --surface: #141917;
+  --border: #242b27;
+  --brand: #3ecf8e;
+  --down: #e85d4c;
+  --text: #e8ece9;
+  --muted: #8b968f;
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #f1f4f2;
+    --surface: #ffffff;
+    --border: #dde3df;
+    --brand: #1a8556;
+    --down: #bd3b2a;
+    --text: #101512;
+    --muted: #5c6b62;
+  }
+}
+
+:root[data-theme="light"] {
+  --bg: #f1f4f2;
+  --surface: #ffffff;
+  --border: #dde3df;
+  --brand: #1a8556;
+  --down: #bd3b2a;
+  --text: #101512;
+  --muted: #5c6b62;
+}
+
+:root[data-theme="dark"] {
+  --bg: #0b0e0c;
+  --surface: #141917;
+  --border: #242b27;
+  --brand: #3ecf8e;
+  --down: #e85d4c;
+  --text: #e8ece9;
+  --muted: #8b968f;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-border: var(--border);
+  --color-brand: var(--brand);
+  --color-down: var(--down);
+  --color-text: var(--text);
+  --color-muted: var(--muted);
+  --font-sans: var(--font-archivo);
+  --font-mono: var(--font-jetbrains-mono);
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-archivo), system-ui, sans-serif;
+}
+
+/*
+ * For assets baked with a fixed color per theme (the wordmark SVGs,
+ * per docs/frontend-architecture/02.md, are real vector paths with
+ * colors baked in at generation time, not currentColor-parameterized),
+ * mirrors the exact three-state logic above so the right file shows
+ * in all three cases: system dark, system light, and an explicit
+ * in-app override once one exists.
+ */
+.theme-dark-only {
+  display: block;
+}
+.theme-light-only {
+  display: none;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) .theme-dark-only {
+    display: none;
+  }
+  :root:not([data-theme="dark"]) .theme-light-only {
+    display: block;
+  }
+}
+:root[data-theme="light"] .theme-dark-only {
+  display: none;
+}
+:root[data-theme="light"] .theme-light-only {
+  display: block;
+}
