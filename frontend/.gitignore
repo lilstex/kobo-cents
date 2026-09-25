@@ -1,0 +1,19 @@
+node_modules/
+.next/
+out/
+build/
+*.tsbuildinfo
+next-env.d.ts
+.env*
+!.env.example
+.DS_Store
+coverage/
+test-results/
+playwright-report/
+blob-report/
+
+# Next.js regenerates these on every `next dev`; not this project's
+# own agent-workflow files, but the user doesn't want any agent
+# instruction file pushed to the remote, so they stay untracked too.
+CLAUDE.md
+AGENTS.md
