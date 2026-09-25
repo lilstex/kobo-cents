@@ -10,7 +10,7 @@ from app.core.config import settings
 from app.db.base import metadata
 
 # Registers every table against metadata before autogenerate runs.
-from app.models import market_data, payments, portfolio, users  # noqa: F401
+from app.models import fundamentals, market_data, payments, portfolio, users  # noqa: F401
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

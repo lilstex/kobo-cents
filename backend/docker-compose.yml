@@ -16,7 +16,9 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - "6379:6379"
+      # 6380 on the host: same reasoning as Postgres's 5433 above, a
+      # native Redis already commonly sits on 6379 on this dev machine.
+      - "6380:6379"
 
   api:
     build: .
