@@ -1,1 +1,1 @@
-from app.workers.tasks import email_tasks, refresh_market_data  # noqa: F401
+from app.workers.tasks import email_tasks, refresh_market_data, subscription_tasks  # noqa: F401

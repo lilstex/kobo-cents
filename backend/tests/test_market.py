@@ -1,9 +1,13 @@
+import logging
 import re
+import time
 import uuid
 
 import pytest
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.read_cache import get_cached_json, get_data_version
+from app.models.market_data import stocks
 from app.workers.tasks.refresh_market_data import refresh_market
 from tests.test_refresh_market_data import _FAKE_FINANCIALS, FakeProvider, _seed_active_weights
 
@@ -195,3 +199,103 @@ async def test_compare_highlights_the_best_stock_per_metric(
     assert {s["ticker"] for s in body["stocks"]} == {"GTCO", "ZENITHBANK", "ACCESSCORP"}
     # GTCO's ROE (196.8e6 / 800e6) beats both other fake peers outright.
     assert body["best_in_comparison"]["roe"] == "GTCO"
+
+
+async def test_stock_detail_requires_market_to_disambiguate_a_ticker_collision(
+    client, db_session, capture_sent_emails
+):
+    """The schema explicitly allows this (unique on (ticker, market),
+    not on ticker alone, per app/models/market_data.py), a real path
+    _resolve_stock has to handle, never exercised until now."""
+    await _signup_verify_login(client, capture_sent_emails, "collision-user@example.com")
+    await db_session.execute(
+        stocks.insert().values(
+            id=uuid.uuid4(),
+            ticker="DUPTICK",
+            company_name="NG Namesake Plc",
+            market="NG",
+            sector="Services",
+            listing_status="active",
+        )
+    )
+    await db_session.execute(
+        stocks.insert().values(
+            id=uuid.uuid4(),
+            ticker="DUPTICK",
+            company_name="US Namesake Inc",
+            market="US",
+            sector="Information Technology",
+            listing_status="active",
+        )
+    )
+
+    ambiguous = await client.get("/api/v1/stocks/DUPTICK")
+    assert ambiguous.status_code == 400
+
+    resolved = await client.get("/api/v1/stocks/DUPTICK", params={"market": "US"})
+    assert resolved.status_code == 200
+    assert resolved.json()["company_name"] == "US Namesake Inc"
+
+
+async def test_overview_cache_skips_the_count_and_rows_queries_once_warm(
+    client, db_session, capture_sent_emails, monkeypatch
+):
+    """The basic load sanity check Phase 11 of docs/backend-
+    architecture/03-phases.md asks for on the hottest read path, cache
+    both warm and cold: not wall-clock timing (flaky on a shared CI
+    runner), the actual, deterministic thing that matters, counted
+    directly rather than inferred from how fast a response came back.
+
+    get_current_user (app/core/deps.py) checks the session against
+    Redis but still re-reads the user row from Postgres on every
+    request to catch a deleted account, so "warm" doesn't mean zero
+    Postgres queries, it means the cache skips the overview's own
+    count-and-rows queries. That fixed one-query-per-request floor
+    from auth is real, expected behaviour, not a caching bug."""
+    await _seed_ng_stocks(db_session)
+    await _signup_verify_login(client, capture_sent_emails, "load-check-user@example.com")
+
+    call_count = {"n": 0}
+    original_execute = AsyncSession.execute
+
+    async def counting_execute(self, *args, **kwargs):
+        call_count["n"] += 1
+        return await original_execute(self, *args, **kwargs)
+
+    monkeypatch.setattr(AsyncSession, "execute", counting_execute)
+
+    # Cold: the first request for this exact query is a guaranteed
+    # cache miss, per the versioned-key scheme in 02.md, and should
+    # cost exactly the auth-check query plus the count query plus the
+    # rows query, no more.
+    call_count["n"] = 0
+    cold_start = time.perf_counter()
+    cold_response = await client.get("/api/v1/markets/NG/overview")
+    cold_elapsed = time.perf_counter() - cold_start
+    assert cold_response.status_code == 200
+    assert call_count["n"] == 3
+
+    # Warm: 50 repeats of the identical query, simulating real
+    # sustained traffic against the hottest read path. Each one still
+    # pays the fixed auth-check query, but none of them should re-run
+    # the count or rows queries the cold request paid for.
+    call_count["n"] = 0
+    warm_start = time.perf_counter()
+    for _ in range(50):
+        warm_response = await client.get("/api/v1/markets/NG/overview")
+        assert warm_response.status_code == 200
+        assert warm_response.json() == cold_response.json()
+    warm_elapsed = time.perf_counter() - warm_start
+
+    assert call_count["n"] == 50
+    # Soft, informational timing check, not the load-bearing
+    # assertion above: 50 cache hits totalling less than one cold
+    # miss would be a surprising regression worth noticing, but this
+    # is not asserted strictly to avoid CI flakiness from shared
+    # runner noise.
+    if warm_elapsed >= cold_elapsed:
+        logging.getLogger("app.test").warning(
+            "50 warm overview requests (%.4fs) were not faster than 1 cold one (%.4fs)",
+            warm_elapsed,
+            cold_elapsed,
+        )

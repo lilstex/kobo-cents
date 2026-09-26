@@ -1,19 +1,27 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_current_user
 from app.core.numeric import floatify
+from app.core.rate_limit import READ_LIMIT, limiter
 from app.core.read_cache import get_cached_json, get_data_version, set_cached_json
 from app.db.session import get_db
 from app.models.fundamentals import stock_fundamentals_current
-from app.models.market_data import stock_prices_current, stock_scores_current, stocks
+from app.models.market_data import (
+    price_history,
+    stock_prices_current,
+    stock_scores_current,
+    stocks,
+)
 from app.schemas.market import (
     CategoryBlock,
     CompareResponse,
     GlossaryPayloadEntry,
     MetricValue,
     OverviewResponse,
+    PriceHistoryResponse,
+    PricePoint,
     SearchResponse,
     SearchResultItem,
     StockDetailResponse,
@@ -42,7 +50,9 @@ def _validate_market(market: str) -> str:
 
 
 @router.get("/markets/{market}/overview", response_model=OverviewResponse)
+@limiter.limit(READ_LIMIT)
 async def market_overview(
+    request: Request,
     market: str,
     sector: str | None = Query(default=None),
     bucket: str | None = Query(default=None),
@@ -205,7 +215,9 @@ async def _resolve_stock(db: AsyncSession, ticker: str, market: str | None) -> d
 
 
 @router.get("/stocks/{ticker}", response_model=StockDetailResponse)
+@limiter.limit(READ_LIMIT)
 async def stock_detail(
+    request: Request,
     ticker: str,
     market: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
@@ -223,8 +235,39 @@ async def stock_detail(
     return response
 
 
+@router.get("/stocks/{ticker}/price-history", response_model=PriceHistoryResponse)
+@limiter.limit(READ_LIMIT)
+async def stock_price_history(
+    request: Request,
+    ticker: str,
+    market: str | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+    _current_user: dict = Depends(get_current_user),
+) -> PriceHistoryResponse:
+    """What the price chart (Frontend Phase 5) actually renders from,
+    per 01.md's price_history/stock_prices_current split: append-only,
+    one row per successful refresh cycle for this stock. Not part of
+    the original Phase 4 read-API list, added once the chart's real
+    prerequisite (an endpoint exposing this table at all) turned out
+    not to exist yet, the same kind of real, necessary gap as the
+    has_session cookie caught in an earlier phase."""
+    stock = await _resolve_stock(db, ticker, market)
+    result = await db.execute(
+        select(price_history.c.recorded_at, price_history.c.close)
+        .where(price_history.c.stock_id == stock["id"])
+        .order_by(price_history.c.recorded_at.asc())
+        .limit(180)
+    )
+    items = [
+        PricePoint(recorded_at=row.recorded_at, price=float(row.close)) for row in result.all()
+    ]
+    return PriceHistoryResponse(items=items)
+
+
 @router.get("/search", response_model=SearchResponse)
+@limiter.limit(READ_LIMIT)
 async def search(
+    request: Request,
     q: str = Query(min_length=1),
     db: AsyncSession = Depends(get_db),
     _current_user: dict = Depends(get_current_user),
@@ -255,7 +298,9 @@ async def search(
 
 
 @router.get("/compare", response_model=CompareResponse)
+@limiter.limit(READ_LIMIT)
 async def compare(
+    request: Request,
     tickers: str = Query(description="Comma-separated tickers, 2 or 3"),
     db: AsyncSession = Depends(get_db),
     _current_user: dict = Depends(get_current_user),

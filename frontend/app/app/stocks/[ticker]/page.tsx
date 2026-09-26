@@ -1,6 +1,7 @@
-import { LineChart } from "lucide-react";
+import { MDXRemote } from "next-mdx-remote/rsc";
 import type { Metadata } from "next";
-import { EmptyState } from "@/components/ui";
+import { StockDetailView } from "@/components/app/stock/StockDetailView";
+import { getAllGlossaryTerms } from "@/lib/glossary";
 
 // Next.js 16: dynamic route params are a Promise, not a plain object,
 // the same breaking change already hit once on the glossary pages.
@@ -11,18 +12,20 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
   return { title: `${ticker.toUpperCase()} — Kobo & Cents` };
 }
 
-// Market overview stock rows and cards (Phase 4) already link here;
-// the real screen, price chart, metric cards, explainability panel,
-// glossary popover, is Phase 5 work and doesn't exist yet, this
-// placeholder exists so that link lands somewhere real today instead
-// of a generic 404.
+// An async Server Component specifically so the glossary drawer (Sub-
+// phase 5.3) can use the exact same MDX source the public /glossary
+// pages render from: next-mdx-remote/rsc's <MDXRemote> only ever
+// renders on the server, never in a client component. All 11 terms
+// (a small, fixed set) are pre-rendered here once and handed down as
+// already-rendered React nodes to the interactive, client-side
+// StockDetailView, which does the actual data fetching and decides
+// which one to reveal.
 export default async function StockDetailPage({ params }: { params: Params }) {
   const { ticker } = await params;
-  return (
-    <EmptyState
-      icon={LineChart}
-      title={`${ticker.toUpperCase()}'s detail page is next`}
-      description="Price chart, metric categories, and the explainability panel are landing here soon."
-    />
+  const terms = getAllGlossaryTerms();
+  const glossaryContent = Object.fromEntries(
+    terms.map((term) => [term.slug, <MDXRemote key={term.slug} source={term.body} />]),
   );
+
+  return <StockDetailView ticker={ticker.toUpperCase()} glossaryContent={glossaryContent} />;
 }

@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.numeric import floatify
 from app.core.read_cache import bump_data_version
 from app.db.session import async_session_factory
+from app.integrations.email.mailtrap import alert_email_html
 from app.integrations.market_data.base import (
     FetchedFinancials,
     MarketDataProvider,
@@ -31,6 +32,9 @@ from app.models.market_data import (
     stock_scores_history,
     stocks,
 )
+from app.models.portfolio import alerts
+from app.models.users import users
+from app.services.alerts import alert_fires, stock_changed_enough_to_check_alerts
 from app.services.scoring import (
     ScoringWeights,
     assign_buckets,
@@ -38,6 +42,7 @@ from app.services.scoring import (
     compute_scores_for_group,
 )
 from app.workers.celery import celery_app
+from app.workers.tasks.email_tasks import send_email_task
 
 logger = logging.getLogger("app.refresh")
 
@@ -95,6 +100,113 @@ async def _previous_price(db: AsyncSession, stock_id: uuid.UUID) -> dict | None:
     )
     row = result.mappings().first()
     return floatify(dict(row)) if row else None
+
+
+async def _previous_score(db: AsyncSession, stock_id: uuid.UUID) -> dict | None:
+    """Read before stock_scores_current gets upserted this cycle, per
+    the same "read the prior row before overwriting it" pattern as
+    _previous_fundamentals/_previous_price above, this one feeding the
+    alert-matching diff instead of the scoring computation itself."""
+    result = await db.execute(
+        select(stock_scores_current).where(stock_scores_current.c.stock_id == stock_id)
+    )
+    row = result.mappings().first()
+    return floatify(dict(row)) if row else None
+
+
+async def _previous_and_new_price_from_history(
+    db: AsyncSession, stock_id: uuid.UUID
+) -> tuple[float | None, float | None]:
+    """stock_prices_current already holds *this* cycle's price by the
+    time alert-matching runs (_write_fundamentals_and_price already
+    overwrote it earlier in this same refresh_market() call), so the
+    previous value has to come from the append-only price_history
+    table instead, the two most recent rows for this stock."""
+    result = await db.execute(
+        select(price_history.c.close)
+        .where(price_history.c.stock_id == stock_id)
+        .order_by(price_history.c.recorded_at.desc())
+        .limit(2)
+    )
+    closes = [float(row[0]) for row in result.all()]
+    new_price = closes[0] if len(closes) >= 1 else None
+    previous_price = closes[1] if len(closes) >= 2 else None
+    return previous_price, new_price
+
+
+async def _check_and_send_alerts(
+    db: AsyncSession,
+    stock_id: uuid.UUID,
+    previous_composite_score: float | None,
+    new_composite_score: float,
+    previous_bucket: str | None,
+    new_bucket: str,
+) -> None:
+    """The O(changed) design from docs/backend-architecture/01.md:
+    only stocks that actually moved get their alerts checked at all,
+    and only then does the indexed stock_id lookup happen, an inverted
+    index (stock to interested users), never a scan of every user's
+    every alert."""
+    previous_price, new_price = await _previous_and_new_price_from_history(db, stock_id)
+    if not stock_changed_enough_to_check_alerts(
+        previous_composite_score, new_composite_score, previous_price, new_price
+    ):
+        return
+
+    result = await db.execute(
+        select(
+            alerts.c.rule_type,
+            alerts.c.rule_config,
+            users.c.email,
+            stocks.c.ticker,
+            stocks.c.company_name,
+        )
+        .select_from(
+            alerts.join(users, users.c.id == alerts.c.user_id).join(
+                stocks, stocks.c.id == alerts.c.stock_id
+            )
+        )
+        .where(alerts.c.stock_id == stock_id, alerts.c.active.is_(True))
+    )
+    for row in result.mappings().all():
+        matched = alert_fires(
+            row["rule_type"],
+            row["rule_config"],
+            previous_bucket,
+            new_bucket,
+            previous_price,
+            new_price,
+        )
+        if not matched:
+            continue
+        message = _alert_message(row["rule_type"], row["rule_config"], new_bucket, new_price)
+        send_email_task.delay(
+            row["email"],
+            f"{row['ticker']} alert: {message}",
+            alert_email_html(
+                row["ticker"],
+                row["company_name"],
+                message,
+                f"https://koboandcents.com/app/stocks/{row['ticker']}",
+            ),
+        )
+
+
+_BUCKET_LABELS = {
+    "well": "performing well",
+    "potential": "showing potential",
+    "under": "underperforming",
+}
+
+
+def _alert_message(
+    rule_type: str, rule_config: dict, new_bucket: str, new_price: float | None
+) -> str:
+    if rule_type == "score_change":
+        return f"Now {_BUCKET_LABELS.get(new_bucket, new_bucket)}."
+    direction = rule_config.get("direction")
+    threshold = rule_config.get("price")
+    return f"Price is now {new_price}, past your {direction} threshold of {threshold}."
 
 
 def _fundamentals_columns(fetched: FetchedFinancials) -> dict:
@@ -295,6 +407,9 @@ async def _score_market(
                 continue
             stock_id = uuid.UUID(sid_str)
             bucket = buckets[sid_str]
+            # Read before the upsert below overwrites it: the diff
+            # this cycle's alert matching needs, per 01.md.
+            previous_score = await _previous_score(db, stock_id)
             values = {
                 "composite_score": result.composite_score,
                 "bucket": bucket,
@@ -313,6 +428,14 @@ async def _score_market(
             await db.execute(
                 stock_scores_history.insert().values(id=uuid.uuid4(), stock_id=stock_id, **values)
             )
+            await _check_and_send_alerts(
+                db,
+                stock_id,
+                previous_score["composite_score"] if previous_score else None,
+                result.composite_score,
+                previous_score["bucket"] if previous_score else None,
+                bucket,
+            )
 
 
 async def _run_refresh(market: str, provider: MarketDataProvider) -> dict:
@@ -322,7 +445,24 @@ async def _run_refresh(market: str, provider: MarketDataProvider) -> dict:
         return result
 
 
-@celery_app.task(name="refresh_market_data")
+@celery_app.task(
+    name="refresh_market_data",
+    autoretry_for=(Exception,),
+    # A missing API key retries into the exact same failure every
+    # time, per app/integrations/market_data/base.py's ProviderNot-
+    # ConfiguredError: the next scheduled cycle already covers this
+    # case, an immediate retry storm against it wastes three backoff
+    # cycles for a certain, permanent-until-someone-fixes-config
+    # failure. Genuinely transient errors (a network blip, a lost DB
+    # connection affecting the whole cycle, not one ticker) still get
+    # retried, per Sub-phase 10.2 of docs/backend-architecture/
+    # 03-phases.md.
+    dont_autoretry_for=(ProviderNotConfiguredError,),
+    retry_backoff=True,
+    retry_backoff_max=600,
+    retry_jitter=True,
+    max_retries=3,
+)
 def refresh_market_data_task(market: str) -> dict:
     from app.integrations.market_data.alpha_vantage import AlphaVantageProvider
     from app.integrations.market_data.ng_research_agent import NGResearchAgent

@@ -62,6 +62,15 @@ class StockDetailResponse(BaseModel):
     fundamentals_as_of: datetime | None
 
 
+class PricePoint(BaseModel):
+    recorded_at: datetime
+    price: float
+
+
+class PriceHistoryResponse(BaseModel):
+    items: list[PricePoint]
+
+
 class SearchResultItem(BaseModel):
     ticker: str
     company_name: str

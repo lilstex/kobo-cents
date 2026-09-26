@@ -22,6 +22,19 @@ class Settings(BaseSettings):
 
     paystack_secret_key: str = ""
     flutterwave_secret_key: str = ""
+    # A separate secret from flutterwave_secret_key: Flutterwave's
+    # webhook verification is a static hash set in their dashboard,
+    # sent back verbatim on every webhook and compared directly, not
+    # an HMAC of the payload the way Paystack's is.
+    flutterwave_webhook_secret_hash: str = ""
+
+    # No real business decision exists yet on pricing, per
+    # docs/01_product.md's monetization section: Stage 2's paywall
+    # decisions get made "based on what Stage 1's usage data actually
+    # shows," not guessed at here. Placeholder values, explicitly
+    # flagged in docs/open-items.md, not a real price.
+    subscription_price_ngn: int = 2_500
+    subscription_price_usd: int = 5
 
     turnstile_secret_key: str = ""
 

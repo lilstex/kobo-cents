@@ -8,7 +8,7 @@ import { TrustSection } from "@/components/marketing/TrustSection";
 import { TwoMarkets } from "@/components/marketing/TwoMarkets";
 import { softwareApplicationSchema } from "@/lib/structured-data";
 
-const TITLE = "Kobo & Cents — Nigerian and US stock research";
+const TITLE = "Kobo & Cents - Nigerian and US stock research";
 const DESCRIPTION =
   "Understand a stock before you decide anything about it. Plain-language Nigerian and US stock research, never a trading platform.";
 
@@ -38,7 +38,9 @@ export default function LandingPage() {
       <script
         type="application/ld+json"
         // eslint-disable-next-line react/no-danger
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(softwareApplicationSchema()) }}
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(softwareApplicationSchema()),
+        }}
       />
       <Hero />
       <TrustSection />

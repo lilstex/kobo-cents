@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.deps import get_current_user
-from app.core.rate_limit import limiter
+from app.core.rate_limit import AUTH_SENSITIVE_LIMIT, WRITE_LIMIT, limiter
 from app.core.security import hash_password, verify_password
 from app.core.session import create_session, delete_all_sessions_for_user, delete_session
 from app.core.tokens import generate_token, hash_token
@@ -92,7 +92,8 @@ async def signup(request: Request, body: SignupRequest, db: AsyncSession = Depen
 
 
 @router.post("/verify", response_model=MessageResponse)
-async def verify(body: VerifyRequest, db: AsyncSession = Depends(get_db)):
+@limiter.limit(AUTH_SENSITIVE_LIMIT)
+async def verify(request: Request, body: VerifyRequest, db: AsyncSession = Depends(get_db)):
     token_hash = hash_token(body.token)
     result = await db.execute(
         select(verification_tokens).where(verification_tokens.c.token_hash == token_hash)
@@ -116,7 +117,10 @@ async def verify(body: VerifyRequest, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/login", response_model=LoginResponse)
-async def login(body: LoginRequest, response: Response, db: AsyncSession = Depends(get_db)):
+@limiter.limit(AUTH_SENSITIVE_LIMIT)
+async def login(
+    request: Request, body: LoginRequest, response: Response, db: AsyncSession = Depends(get_db)
+):
     result = await db.execute(select(users).where(users.c.email == body.email))
     user = result.mappings().first()
     if user is None or not verify_password(body.password, user["password_hash"]):
@@ -160,7 +164,10 @@ async def login(body: LoginRequest, response: Response, db: AsyncSession = Depen
 
 
 @router.post("/resend-verification", response_model=MessageResponse)
-async def resend_verification(body: ForgotPasswordRequest, db: AsyncSession = Depends(get_db)):
+@limiter.limit(AUTH_SENSITIVE_LIMIT)
+async def resend_verification(
+    request: Request, body: ForgotPasswordRequest, db: AsyncSession = Depends(get_db)
+):
     result = await db.execute(
         select(users).where(users.c.email == body.email, users.c.email_verified.is_(False))
     )
@@ -179,6 +186,7 @@ async def resend_verification(body: ForgotPasswordRequest, db: AsyncSession = De
 
 
 @router.post("/logout", response_model=MessageResponse)
+@limiter.limit(WRITE_LIMIT)
 async def logout(request: Request, response: Response):
     session_id = request.cookies.get(settings.session_cookie_name)
     if session_id:
@@ -189,7 +197,9 @@ async def logout(request: Request, response: Response):
 
 
 @router.post("/change-password", response_model=MessageResponse)
+@limiter.limit(AUTH_SENSITIVE_LIMIT)
 async def change_password(
+    request: Request,
     body: ChangePasswordRequest,
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -232,7 +242,10 @@ async def forgot_password(
 
 
 @router.post("/reset-password", response_model=MessageResponse)
-async def reset_password(body: ResetPasswordRequest, db: AsyncSession = Depends(get_db)):
+@limiter.limit(AUTH_SENSITIVE_LIMIT)
+async def reset_password(
+    request: Request, body: ResetPasswordRequest, db: AsyncSession = Depends(get_db)
+):
     if len(body.new_password) < _MIN_PASSWORD_LENGTH:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_ENTITY,

@@ -61,3 +61,10 @@ def password_reset_email_html(reset_url: str) -> str:
         f'<p><a href="{reset_url}">Choose a new password</a></p>'
         f"<p>This link expires in 30 minutes. If you didn't request this, ignore this email.</p>"
     )
+
+
+def alert_email_html(ticker: str, company_name: str, message: str, stock_url: str) -> str:
+    return (
+        f"<p><strong>{ticker}</strong> ({company_name}): {message}</p>"
+        f'<p><a href="{stock_url}">View {ticker} on Kobo &amp; Cents</a></p>'
+    )

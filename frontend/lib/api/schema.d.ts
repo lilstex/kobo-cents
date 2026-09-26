@@ -183,6 +183,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/stocks/{ticker}/price-history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Stock Price History
+         * @description What the price chart (Frontend Phase 5) actually renders from,
+         *     per 01.md's price_history/stock_prices_current split: append-only,
+         *     one row per successful refresh cycle for this stock. Not part of
+         *     the original Phase 4 read-API list, added once the chart's real
+         *     prerequisite (an endpoint exposing this table at all) turned out
+         *     not to exist yet, the same kind of real, necessary gap as the
+         *     has_session cookie caught in an earlier phase.
+         */
+        get: operations["stock_price_history_api_v1_stocks__ticker__price_history_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/search": {
         parameters: {
             query?: never;
@@ -272,6 +298,206 @@ export interface paths {
         patch: operations["update_favorite_status_api_v1_favorites__stock_id__patch"];
         trace?: never;
     };
+    "/api/v1/alerts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Alerts
+         * @description Not named in Sub-phase 6.1's task list (only POST and DELETE
+         *     are), added for the same reason Favorites got a GET: a resource
+         *     with no way to read it back isn't usable, and this mirrors the
+         *     exact shape app/api/v1/favorites.py already established.
+         */
+        get: operations["list_alerts_api_v1_alerts_get"];
+        put?: never;
+        /** Create Alert */
+        post: operations["create_alert_api_v1_alerts_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/alerts/{alert_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Alert */
+        delete: operations["delete_alert_api_v1_alerts__alert_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/account": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Account
+         * @description Sub-phase 10.4: a soft delete, not a hard DELETE, per docs/
+         *     backend-architecture/02.md, sets deleted_at and anonymizes the
+         *     users row's personal fields, leaves subscriptions and
+         *     payment_events untouched (likely needed for accounting purposes
+         *     regardless of what a user asked deleted about their own profile).
+         *     The exact retention period before an anonymized row is ever purged
+         *     for good is a real, still-open NDPR question, per 02.md's explicit
+         *     instruction not to guess at it here; this endpoint is the request
+         *     mechanism, correct regardless of what that period turns out to be.
+         *
+         *     A hijacked session cookie alone can't trigger this: the current
+         *     password is required too, the same extra confirmation change-
+         *     password already asks for, since this action can't be undone by
+         *     logging back in the way a password change can.
+         */
+        delete: operations["delete_account_api_v1_account_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/share": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Share
+         * @description Snapshots the caller's favorites list as it exists right now,
+         *     per 01_product.md: "here's what I'm watching right now," not a
+         *     live view that would keep drifting for the 24 hours the link
+         *     stays valid. No Postgres row, per 02.md, this data is inherently
+         *     disposable and doesn't need to survive a service restart the way
+         *     a user's actual account data does.
+         */
+        post: operations["create_share_api_v1_share_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/share/{token}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Share
+         * @description Unauthenticated on purpose, per 01_product.md: anyone with the
+         *     link can view it, no login needed on their end. Rate-limited per
+         *     IP against enumeration, per Sub-phase 7.2, since a token is the
+         *     only thing standing between a guess and someone else's favorites
+         *     list. A missing key reads as 404 whether it never existed or
+         *     already expired, Redis has already deleted it either way, no
+         *     separate expiry check needed.
+         */
+        get: operations["get_share_api_v1_share__token__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/subscriptions/checkout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Checkout */
+        post: operations["create_checkout_api_v1_subscriptions_checkout_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/subscriptions/entitlement": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Entitlement
+         * @description A plain yes/no, not part of Backend Phase 6/7/8's original task
+         *     list: Frontend Sub-phase 8.2 needs to know which empty state to
+         *     show (free-tier Lock icon vs. the real paid-tier form) before any
+         *     gated action is attempted, and require_feature() alone only
+         *     answers that by way of a 402 after the fact.
+         */
+        get: operations["get_entitlement_api_v1_subscriptions_entitlement_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/webhooks/paystack": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Paystack Webhook */
+        post: operations["paystack_webhook_api_v1_webhooks_paystack_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/webhooks/flutterwave": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Flutterwave Webhook */
+        post: operations["flutterwave_webhook_api_v1_webhooks_flutterwave_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -305,6 +531,38 @@ export interface components {
             /** Market */
             market: string;
         };
+        /** AlertRule */
+        AlertRule: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Ticker */
+            ticker: string;
+            /** Company Name */
+            company_name: string;
+            /** Market */
+            market: string;
+            /** Rule Type */
+            rule_type: string;
+            /** Rule Config */
+            rule_config: {
+                [key: string]: unknown;
+            };
+            /** Active */
+            active: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** AlertsResponse */
+        AlertsResponse: {
+            /** Items */
+            items: components["schemas"]["AlertRule"][];
+        };
         /** CategoryBlock */
         CategoryBlock: {
             /** Category */
@@ -321,6 +579,16 @@ export interface components {
             /** New Password */
             new_password: string;
         };
+        /** CheckoutRequest */
+        CheckoutRequest: {
+            /** Provider */
+            provider: string;
+        };
+        /** CheckoutResponse */
+        CheckoutResponse: {
+            /** Redirect Url */
+            redirect_url: string;
+        };
         /** CompareResponse */
         CompareResponse: {
             /** Stocks */
@@ -329,6 +597,44 @@ export interface components {
             best_in_comparison: {
                 [key: string]: string;
             };
+        };
+        /** CreateAlertRequest */
+        CreateAlertRequest: {
+            /** Ticker */
+            ticker: string;
+            /** Market */
+            market: string;
+            /** Rule Type */
+            rule_type: string;
+            /**
+             * Rule Config
+             * @default {}
+             */
+            rule_config: {
+                [key: string]: unknown;
+            };
+        };
+        /** CreateShareResponse */
+        CreateShareResponse: {
+            /** Token */
+            token: string;
+            /** Share Url */
+            share_url: string;
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+        };
+        /** DeleteAccountRequest */
+        DeleteAccountRequest: {
+            /** Password */
+            password: string;
+        };
+        /** EntitlementResponse */
+        EntitlementResponse: {
+            /** Entitled */
+            entitled: boolean;
         };
         /** FavoriteItem */
         FavoriteItem: {
@@ -430,6 +736,21 @@ export interface components {
             /** Offset */
             offset: number;
         };
+        /** PriceHistoryResponse */
+        PriceHistoryResponse: {
+            /** Items */
+            items: components["schemas"]["PricePoint"][];
+        };
+        /** PricePoint */
+        PricePoint: {
+            /**
+             * Recorded At
+             * Format: date-time
+             */
+            recorded_at: string;
+            /** Price */
+            price: number;
+        };
         /** ResetPasswordRequest */
         ResetPasswordRequest: {
             /** Token */
@@ -452,6 +773,37 @@ export interface components {
             market: string;
             /** Sector */
             sector: string;
+        };
+        /** ShareSnapshotItem */
+        ShareSnapshotItem: {
+            /** Ticker */
+            ticker: string;
+            /** Company Name */
+            company_name: string;
+            /** Market */
+            market: string;
+            /** Sector */
+            sector: string;
+            /** Status */
+            status: string;
+            /** Price */
+            price: number | null;
+            /** Change Percent */
+            change_percent: number | null;
+            /** Composite Score */
+            composite_score: number | null;
+            /** Bucket */
+            bucket: string | null;
+        };
+        /** ShareView */
+        ShareView: {
+            /** Items */
+            items: components["schemas"]["ShareSnapshotItem"][];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
         };
         /** SignupRequest */
         SignupRequest: {
@@ -890,6 +1242,39 @@ export interface operations {
             };
         };
     };
+    stock_price_history_api_v1_stocks__ticker__price_history_get: {
+        parameters: {
+            query?: {
+                market?: string | null;
+            };
+            header?: never;
+            path: {
+                ticker: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PriceHistoryResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     search_api_v1_search_get: {
         parameters: {
             query: {
@@ -1066,6 +1451,280 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_alerts_api_v1_alerts_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertsResponse"];
+                };
+            };
+        };
+    };
+    create_alert_api_v1_alerts_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateAlertRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertRule"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_alert_api_v1_alerts__alert_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                alert_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_account_api_v1_account_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeleteAccountRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_share_api_v1_share_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreateShareResponse"];
+                };
+            };
+        };
+    };
+    get_share_api_v1_share__token__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShareView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_checkout_api_v1_subscriptions_checkout_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CheckoutRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CheckoutResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_entitlement_api_v1_subscriptions_entitlement_get: {
+        parameters: {
+            query: {
+                feature: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EntitlementResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    paystack_webhook_api_v1_webhooks_paystack_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    flutterwave_webhook_api_v1_webhooks_flutterwave_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
         };

@@ -1,6 +1,6 @@
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.v1.market import _resolve_stock
 from app.core.deps import get_current_user
 from app.core.numeric import floatify
+from app.core.rate_limit import READ_LIMIT, WRITE_LIMIT, limiter
 from app.db.session import get_db
 from app.models.market_data import stock_prices_current, stock_scores_current, stocks
 from app.models.portfolio import favorites
@@ -58,7 +59,9 @@ def _favorites_select(user_id):
 
 
 @router.post("", response_model=FavoriteItem, status_code=status.HTTP_201_CREATED)
+@limiter.limit(WRITE_LIMIT)
 async def add_favorite(
+    request: Request,
     body: AddFavoriteRequest,
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user),
@@ -80,7 +83,9 @@ async def add_favorite(
 
 
 @router.patch("/{stock_id}", response_model=FavoriteItem)
+@limiter.limit(WRITE_LIMIT)
 async def update_favorite_status(
+    request: Request,
     stock_id: uuid.UUID,
     body: UpdateFavoriteStatusRequest,
     db: AsyncSession = Depends(get_db),
@@ -106,7 +111,9 @@ async def update_favorite_status(
 
 
 @router.delete("/{stock_id}", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit(WRITE_LIMIT)
 async def remove_favorite(
+    request: Request,
     stock_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user),
@@ -122,7 +129,9 @@ async def remove_favorite(
 
 
 @router.get("", response_model=FavoritesResponse)
+@limiter.limit(READ_LIMIT)
 async def list_favorites(
+    request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ) -> FavoritesResponse:
