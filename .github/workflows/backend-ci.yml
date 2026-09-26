@@ -20,3 +20,25 @@ jobs:
       - run: pip install -e ".[dev]"
       - run: ruff check .
       - run: pytest
+
+  security:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # An outdated bundled pip itself shows up as a "vulnerable
+      # dependency" otherwise, a false-flag distraction from the
+      # actual app dependencies pip-audit exists to check.
+      - run: pip install --upgrade pip
+      - run: pip install -e "."
+      # Sub-phase 10.1 of docs/backend-architecture/03-phases.md:
+      # flags known-vulnerable dependencies on every push, a real,
+      # cheap practice named explicitly in docs/backend-architecture/
+      # 00.md rather than left to happen by accident of using GitHub.
+      - run: pip install pip-audit
+      - run: pip-audit

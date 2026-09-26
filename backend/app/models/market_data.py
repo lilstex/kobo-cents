@@ -33,6 +33,21 @@ stocks = Table(
     Column("sector", String, nullable=False),
     Column("listing_status", String, nullable=False, default="active"),
     UniqueConstraint("ticker", "market", name="uq_stocks_ticker_market"),
+    # Trigram indexes for Sub-phase 4.3's fuzzy search, per 01.md: a
+    # typo-tolerant "zenit" still finds Zenith Bank. Requires the
+    # pg_trgm extension, enabled in the migration that creates these.
+    Index(
+        "ix_stocks_ticker_trgm",
+        "ticker",
+        postgresql_using="gin",
+        postgresql_ops={"ticker": "gin_trgm_ops"},
+    ),
+    Index(
+        "ix_stocks_company_name_trgm",
+        "company_name",
+        postgresql_using="gin",
+        postgresql_ops={"company_name": "gin_trgm_ops"},
+    ),
 )
 
 stock_scores_current = Table(
@@ -72,6 +87,11 @@ stock_prices_current = Table(
     Column("stock_id", UUID(as_uuid=True), ForeignKey("stocks.id"), primary_key=True),
     Column("price", Numeric, nullable=False),
     Column("change_percent", Numeric, nullable=False),
+    # Same provenance fields as stock_fundamentals_current, per 00.md:
+    # for an NG stock, price comes from the same research-agent call
+    # as the fundamentals, not a separately-trusted source.
+    Column("data_source", String, nullable=False),
+    Column("needs_review", Boolean, nullable=False, default=False),
     Column("last_successful_refresh_at", DateTime(timezone=True), nullable=False),
 )
 
